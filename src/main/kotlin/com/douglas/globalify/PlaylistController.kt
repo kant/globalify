@@ -29,5 +29,7 @@ class PlaylistController {
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 open class ResposeDTO(val success: Boolean, val message: String?)
-data class PlaylistDTO(val location: String, val temperature: Float) : ResposeDTO(true, null)
+
+data class PlaylistDTO(val location: String, val temperature: Float, val genre: String, val spotify: SpotifyResponse)
+    : ResposeDTO(true, null)
 
