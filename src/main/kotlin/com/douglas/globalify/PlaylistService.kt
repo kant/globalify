@@ -9,6 +9,12 @@ import java.util.logging.Logger
 
 const val MINUTES_OFFSET = 60
 
+const val LOCATION_NOT_FOUND = "Location not found"
+const val SPOTIFY_COMM_ERROR = "Could not communicate with Spotify"
+const val SPOTIFY_AUTH_ERROR = "Spotify authentication nonexistant or expired"
+const val SPOTIFY_TRACKS_NOT_FOUND = "Could not find tracks for playlist"
+const val SPOTIFY_PLAYLIST_NOT_FOUND = "Could not find playlist for genre"
+
 @Service
 class PlaylistService {
     val logger = Logger.getLogger(PlaylistService::class.simpleName)!!
@@ -66,11 +72,12 @@ class PlaylistService {
         logger.info(reqWeather.text)
 
         if (reqWeather.statusCode != 200 || reqWeather.text.isEmpty())
-            throw ServiceException("Location not found")
+            throw ServiceException(LOCATION_NOT_FOUND)
 
+        // parses response json to matching object
         val respWeather = Gson().fromJson<WeatherTempResponse>(reqWeather.text,
                 WeatherTempResponse::class.java)
-        if (respWeather?.main?.temp == null) throw ServiceException("Location not found")
+        if (respWeather?.main?.temp == null) throw ServiceException(LOCATION_NOT_FOUND)
         return respWeather
     }
 
@@ -85,11 +92,12 @@ class PlaylistService {
 //        logger.info(reqWeather.text)
 
         if (reqWeather.statusCode != 200 || reqWeather.text.isEmpty())
-            throw ServiceException("Location not found")
+            throw ServiceException(LOCATION_NOT_FOUND)
 
+        // parses response json to matching object
         val respWeather = Gson().fromJson<WeatherTempResponse>(reqWeather.text,
                 WeatherTempResponse::class.java)
-        if (respWeather?.main?.temp == null) throw ServiceException("Location not found")
+        if (respWeather?.main?.temp == null) throw ServiceException(LOCATION_NOT_FOUND)
         return respWeather
     }
 
@@ -109,12 +117,12 @@ class PlaylistService {
 //        logger.info(reqAuth.text)
 
         if (reqAuth.statusCode != 200 || reqAuth.text.isEmpty())
-            throw ServiceException("Could not communicate with Spotify")
+            throw ServiceException(SPOTIFY_COMM_ERROR)
 
         val respAuth = Gson().fromJson<SpotifyAuthResponse>(reqAuth.text,
                 SpotifyAuthResponse::class.java)
         if (respAuth?.access_token == null || respAuth.access_token.isEmpty())
-            throw ServiceException("Could not communicate with Spotify")
+            throw ServiceException(SPOTIFY_COMM_ERROR)
 
         spotifyAuth = SpotifyAuth(respAuth.access_token, respAuth.token_type,
                 Instant.now().epochSecond.plus(respAuth.expires_in).minus(MINUTES_OFFSET))
@@ -122,7 +130,7 @@ class PlaylistService {
 
     private fun getPlaylist(genre: String): SpotifyPlaylistResponse {
         if (spotifyAuth == null || spotifyAuth!!.expiration < Instant.now().epochSecond) {
-            logger.info("Spotify authentication nonexistant or expired")
+            logger.info(SPOTIFY_AUTH_ERROR)
             authorizeSpotify()
         }
 
@@ -133,7 +141,7 @@ class PlaylistService {
                         SpotifyAPI.LIMIT_PARAM to SpotifyAPI.LIMIT_VALUE,
                         SpotifyAPI.SEARCH_PARAM to genre))
         if (reqSearch.statusCode != 200 || reqSearch.text.isEmpty())
-            throw ServiceException("Could not find playlist for genre $genre")
+            throw ServiceException(SPOTIFY_PLAYLIST_NOT_FOUND)
         logger.info("Spotify search status code ${reqSearch.statusCode}")
 //        logger.info(reqSearch.text)
 
@@ -142,7 +150,7 @@ class PlaylistService {
         if (respSearch?.playlists?.items == null
                 || respSearch.playlists.items.isEmpty()
                 || respSearch.playlists.items[0].href.isEmpty())
-            throw ServiceException("Could not find playlist for genre $genre")
+            throw ServiceException(SPOTIFY_PLAYLIST_NOT_FOUND)
 
         val reqPlaylist = get(url = respSearch.playlists.items[0].href,
                 headers = mapOf(SpotifyAPI.AUTH_HEADER
@@ -152,7 +160,7 @@ class PlaylistService {
 //        logger.info(reqPlaylist.text)
 
         if (reqPlaylist.statusCode != 200 || reqPlaylist.text.isEmpty())
-            throw ServiceException("Could not find tracks for playlist")
+            throw ServiceException(SPOTIFY_TRACKS_NOT_FOUND)
 
         return Gson().fromJson(reqPlaylist.text, SpotifyPlaylistResponse::class.java)
     }

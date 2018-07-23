@@ -13,7 +13,8 @@ function getPlaylist(e) {
             $("#response").html(getResultText(data))
         },
         error: function(data) {
-            $("#response").html("<h3>Could not communicate to server, check your internet connection and try again<h3>")
+            $("#response").html('<h3>Could not communicate to server,
+                + 'check your internet connection and try again<h3>')
         },
         complete: function() {
             $('#submit').attr('disabled', false)
@@ -24,8 +25,10 @@ function getPlaylist(e) {
 function getResultText(data) {
     var text = '<h3>'
     if (data.success) {
-        text += 'It is ' + data.temperature + 'ºC in ' + (data.location ? data.location : $('#query').val())
-        text += ', here\'s a <a target="_blank" href="' + data.spotify.external_urls.spotify + '">' + data.genre + ' playlist</a> for you!'
+        text += 'It is ' + data.temperature + 'ºC in ' +
+            (data.location ? data.location : $('#query').val())
+        text += ', here\'s a <a target="_blank" href="' + data.spotify.external_urls.spotify + '">'
+        text += data.genre + ' playlist</a> for you!'
         text += getTrackTable(data)
     } else {
         text += data.message

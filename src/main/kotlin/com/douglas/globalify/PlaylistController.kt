@@ -9,15 +9,15 @@ import java.util.logging.Logger
 
 const val COORD_SEP = ","
 
-@RestController()
+@RestController() // configure class as a controller of a servlet
 class PlaylistController {
 
     val logger = Logger.getLogger(PlaylistController::class.simpleName)!!
 
-    @Autowired
+    @Autowired // enable instance injection for this service
     lateinit var playlistService: PlaylistService
 
-    @RequestMapping("/getPlaylist")
+    @RequestMapping("/getPlaylist") // define an endpoint that reaches this function
     fun getPlaylist(@RequestParam(value = "location") location: String?,
                   @RequestParam(value = "coord") coord: String?): ResposeDTO {
         return try {
@@ -34,6 +34,9 @@ class PlaylistController {
         }
     }
 
+    /**
+     * Checks if string is a gps coordinate
+     */
     private fun isCoord(coord: String?): Boolean {
         if (coord.isNullOrEmpty()) return false
         val split = coord!!.split(COORD_SEP)
@@ -43,6 +46,9 @@ class PlaylistController {
         return true
     }
 
+    /**
+     * Parses param to gps coordinate
+     */
     private fun parseCoord(coord: String): Pair<Double, Double> {
         val split = coord.split(COORD_SEP)
         return Pair(split[0].toDouble(), split[1].toDouble())
