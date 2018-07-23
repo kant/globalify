@@ -102,7 +102,7 @@ class PlaylistService {
     }
 
     private fun getGenre(temp: Float) = when (temp) {
-        in 31.01..Double.MAX_VALUE -> MusicGenre.PARTY
+        in 30.01..Double.MAX_VALUE -> MusicGenre.PARTY
         in 15.01..30.00 -> MusicGenre.POP
         in 10.01..15.00 -> MusicGenre.ROCK
         else -> MusicGenre.CLASSICAL
