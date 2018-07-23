@@ -7,56 +7,50 @@ import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.logging.Logger
 
+const val MINUTES_OFFSET = 60
+
 @Service
 class PlaylistService {
-
-    val MINUTES_OFFSET = 60
-    val logger = Logger.getLogger(PlaylistService::class.simpleName)
+    val logger = Logger.getLogger(PlaylistService::class.simpleName)!!
     var spotifyAuth: SpotifyAuth? = null
 
-    fun getPlaylistForCity(city: String): PlaylistDTO {
+    /**
+     * Get playlist suggestion for a city
+     */
+    fun getPlaylistForLocation(city: String): PlaylistDTO {
         try {
             val respWeather = getTemperature(city)
+            logger.info("Temp: ${respWeather.main.temp}")
 
             val genre = getGenre(respWeather.main.temp)
             logger.info("Genre: $genre")
 
-            if (spotifyAuth == null || spotifyAuth!!.expiration < Instant.now().epochSecond) {
-                logger.info("Spotify authentication nonexistant or expired")
-                authorizeSpotify()
-            }
+            val playlist = getPlaylist(genre)
 
-            val reqSearch = khttp.get(url = SpotifyAPI.BASE_SEARCH_URL,
-                    headers = mapOf(SpotifyAPI.AUTH_HEADER
-                            to "${spotifyAuth!!.tokenType} ${spotifyAuth!!.token}"),
-                    params = mapOf(SpotifyAPI.TYPE_PARAM to SpotifyAPI.TYPE_VALUE,
-                            SpotifyAPI.LIMIT_PARAM to SpotifyAPI.LIMIT_VALUE,
-                            SpotifyAPI.SEARCH_PARAM to genre))
-            if (reqSearch.statusCode != 200 || reqSearch.text.isEmpty())
-                throw ServiceException("Could not find playlist for genre $genre")
-            logger.info("Spotify search status code ${reqSearch.statusCode}")
-            logger.info(reqSearch.text)
+            return PlaylistDTO(respWeather.name, respWeather.main.temp, genre, playlist)
+        } catch (e: ServiceException) {
+            throw e
+        } catch (e: Exception) {
+            throw ServiceException("Error processing request: ${e.message}")
+        }
+    }
 
-            val respSearch = Gson().fromJson<SpotifyResponse>(reqSearch.text,
-                    SpotifyResponse::class.java)
-            if (respSearch?.playlists?.items == null
-                    || respSearch.playlists.items.isEmpty()
-                    || respSearch.playlists.items[0].href.isEmpty())
-                throw ServiceException("Could not find playlist for genre $genre")
+    /**
+     * Get playlist suggestion for gps coordinate
+     */
+    fun getPlaylistForLocation(coord: Pair<Double, Double>): PlaylistDTO {
+        try {
+            val respWeather = getTemperature(coord.first, coord.second)
+            logger.info("Temp: ${respWeather.main.temp}")
 
-            val reqPlayl = khttp.get(url = respSearch.playlists.items[0].href,
-                    headers = mapOf(SpotifyAPI.AUTH_HEADER
-                            to "${spotifyAuth!!.tokenType} ${spotifyAuth!!.token}"))
+            val genre = getGenre(respWeather.main.temp)
+            logger.info("Genre: $genre")
 
-            logger.info("Spotify tracks status code ${reqPlayl.statusCode}")
-            logger.info(reqPlayl.text)
-            if (reqPlayl.statusCode != 200 || reqPlayl.text.isEmpty())
-                throw ServiceException("Could not find tracks for playlist")
+            val playlist = getPlaylist(genre)
 
-            val respPlayl = Gson().fromJson<SpotifyPlaylistResponse>(reqPlayl.text,
-                    SpotifyPlaylistResponse::class.java)
-
-            return PlaylistDTO(respWeather.name, respWeather.main.temp, genre, respPlayl)
+            return PlaylistDTO(respWeather.name, respWeather.main.temp, genre, playlist)
+        } catch (e: ServiceException) {
+            throw e
         } catch (e: Exception) {
             throw ServiceException("Error processing request: ${e.message}")
         }
@@ -67,8 +61,10 @@ class PlaylistService {
                 WeatherAPI.LOCATION_PARAM to city,
                 WeatherAPI.APPID_PARAM to WeatherAPI.APPID_VALUE,
                 WeatherAPI.UNITS_PARAM to WeatherAPI.UNITS_VALUE))
+
         logger.info("Weather status code ${reqWeather.statusCode}")
         logger.info(reqWeather.text)
+
         if (reqWeather.statusCode != 200 || reqWeather.text.isEmpty())
             throw ServiceException("Location not found")
 
@@ -78,12 +74,39 @@ class PlaylistService {
         return respWeather
     }
 
+    private fun getTemperature(lat: Double, lon: Double): WeatherTempResponse {
+        val reqWeather = get(url = WeatherAPI.BASE_URL, params = mapOf(
+                WeatherAPI.LAT_PARAM to lat.toString(),
+                WeatherAPI.LON_PARAM to lon.toString(),
+                WeatherAPI.APPID_PARAM to WeatherAPI.APPID_VALUE,
+                WeatherAPI.UNITS_PARAM to WeatherAPI.UNITS_VALUE))
+
+        logger.info("Weather status code ${reqWeather.statusCode}")
+//        logger.info(reqWeather.text)
+
+        if (reqWeather.statusCode != 200 || reqWeather.text.isEmpty())
+            throw ServiceException("Location not found")
+
+        val respWeather = Gson().fromJson<WeatherTempResponse>(reqWeather.text,
+                WeatherTempResponse::class.java)
+        if (respWeather?.main?.temp == null) throw ServiceException("Location not found")
+        return respWeather
+    }
+
+    private fun getGenre(temp: Float) = when (temp) {
+        in 31.01..Double.MAX_VALUE -> MusicGenre.PARTY
+        in 15.01..30.00 -> MusicGenre.POP
+        in 10.01..15.00 -> MusicGenre.ROCK
+        else -> MusicGenre.CLASSICAL
+    }
+
     private fun authorizeSpotify() {
         val reqAuth = post(url = SpotifyAPI.BASE_AUTH_URL,
                 headers = mapOf(SpotifyAPI.AUTH_HEADER to SpotifyAPI.AUTH_VALUE),
                 data = mapOf(SpotifyAPI.GRANT_TYPE_PARAM to SpotifyAPI.GRANT_TYPE_VALUE))
+
         logger.info("Spotify auth status code ${reqAuth.statusCode}")
-        logger.info(reqAuth.text)
+//        logger.info(reqAuth.text)
 
         if (reqAuth.statusCode != 200 || reqAuth.text.isEmpty())
             throw ServiceException("Could not communicate with Spotify")
@@ -97,58 +120,40 @@ class PlaylistService {
                 Instant.now().epochSecond.plus(respAuth.expires_in).minus(MINUTES_OFFSET))
     }
 
-    fun getGenre(temp: Float) = when (temp) {
-        in 31..Int.MAX_VALUE -> MusicGenre.PARTY
-        in 15..30 -> MusicGenre.POP
-        in 10..14 -> MusicGenre.ROCK
-        else -> MusicGenre.CLASSICAL
+    private fun getPlaylist(genre: String): SpotifyPlaylistResponse {
+        if (spotifyAuth == null || spotifyAuth!!.expiration < Instant.now().epochSecond) {
+            logger.info("Spotify authentication nonexistant or expired")
+            authorizeSpotify()
+        }
+
+        val reqSearch = get(url = SpotifyAPI.BASE_SEARCH_URL,
+                headers = mapOf(SpotifyAPI.AUTH_HEADER
+                        to "${spotifyAuth!!.tokenType} ${spotifyAuth!!.token}"),
+                params = mapOf(SpotifyAPI.TYPE_PARAM to SpotifyAPI.TYPE_VALUE,
+                        SpotifyAPI.LIMIT_PARAM to SpotifyAPI.LIMIT_VALUE,
+                        SpotifyAPI.SEARCH_PARAM to genre))
+        if (reqSearch.statusCode != 200 || reqSearch.text.isEmpty())
+            throw ServiceException("Could not find playlist for genre $genre")
+        logger.info("Spotify search status code ${reqSearch.statusCode}")
+//        logger.info(reqSearch.text)
+
+        val respSearch = Gson().fromJson<SpotifyResponse>(reqSearch.text,
+                SpotifyResponse::class.java)
+        if (respSearch?.playlists?.items == null
+                || respSearch.playlists.items.isEmpty()
+                || respSearch.playlists.items[0].href.isEmpty())
+            throw ServiceException("Could not find playlist for genre $genre")
+
+        val reqPlaylist = get(url = respSearch.playlists.items[0].href,
+                headers = mapOf(SpotifyAPI.AUTH_HEADER
+                        to "${spotifyAuth!!.tokenType} ${spotifyAuth!!.token}"))
+
+        logger.info("Spotify playlist status code ${reqPlaylist.statusCode}")
+//        logger.info(reqPlaylist.text)
+
+        if (reqPlaylist.statusCode != 200 || reqPlaylist.text.isEmpty())
+            throw ServiceException("Could not find tracks for playlist")
+
+        return Gson().fromJson(reqPlaylist.text, SpotifyPlaylistResponse::class.java)
     }
-
-}
-
-data class WeatherTempResponse(val name: String, val main: WeatherTemp, val cod: Int)
-data class WeatherTemp(val temp: Float)
-
-data class SpotifyResponse(val playlists: SpotifyPlaylistResponse)
-data class SpotifyAuthResponse(val access_token: String, val token_type: String, val expires_in: Int)
-data class SpotifyPlaylistResponse(val items: List<SpotifyPlaylist>, val tracks: SpotifyTrackResponse)
-data class SpotifyTrackResponse(val href: String, val items: List<SpotifyTrack>)
-
-data class SpotifyAuth(val token: String, val tokenType: String, val expiration: Long)
-data class SpotifyPlaylist(val name: String, val external_urls: SpotifyUrl, val href: String)
-data class SpotifyTrack(val track: SpotifyTrackInfo)
-data class SpotifyTrackInfo(val name: String)
-data class SpotifyUrl(val spotify: String)
-
-
-class ServiceException(message: String?) : Exception(message)
-
-object WeatherAPI {
-    val BASE_URL = "https://api.openweathermap.org/data/2.5/weather"
-    val LOCATION_PARAM = "q"
-    val APPID_PARAM = "appid"
-    val APPID_VALUE = "a5b5cbc0da6ddfb96bd03be9872d8405"
-    val UNITS_PARAM = "units"
-    val UNITS_VALUE = "metric"
-}
-
-object SpotifyAPI {
-    val BASE_AUTH_URL = "https://accounts.spotify.com/api/token"
-    val BASE_SEARCH_URL = "https://api.spotify.com/v1/search"
-    val AUTH_HEADER = "Authorization"
-    val AUTH_VALUE = "Basic Y2RhNmY5NWM4NjgyNGVkMWIwNDhiMWZmMzYxOWQ5Y2M6MTUwNjc4MTM0Y2E3NGJkNmI4ZTE3MzU1NDkzNjEwM2I="
-    val GRANT_TYPE_PARAM = "grant_type"
-    val GRANT_TYPE_VALUE = "client_credentials"
-    val TYPE_PARAM = "type"
-    val TYPE_VALUE = "playlist"
-    val LIMIT_PARAM = "limit"
-    val LIMIT_VALUE = "1"
-    val SEARCH_PARAM = "q"
-}
-
-object MusicGenre {
-    val PARTY = "party"
-    val POP = "pop"
-    val ROCK = "rock"
-    val CLASSICAL = "classical"
 }
