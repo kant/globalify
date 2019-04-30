@@ -8,13 +8,12 @@ function getPlaylist(e) {
 
     $('#submit').attr('disabled', true)
     xhr = $.ajax({
-        url: '/getPlaylist?' + $('input[name=type]:checked', '#typeForm').val() + '=' + $('#query').val(),
+        url: '/v1/getPlaylist?' + $('input[name=type]:checked', '#typeForm').val() + '=' + $('#query').val(),
         success: function(data) {
             $("#response").html(getResultText(data))
         },
         error: function(data) {
-            $("#response").html('<h3>Could not communicate to server,
-                + 'check your internet connection and try again<h3>')
+            $("#response").html('<h3>Could not communicate to server, check your internet connection and try again<h3>')
         },
         complete: function() {
             $('#submit').attr('disabled', false)

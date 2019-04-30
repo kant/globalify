@@ -1,5 +1,8 @@
-package com.douglas.globalify
+package com.douglas.globalify.controller
 
+import com.douglas.globalify.service.PlaylistService
+import com.douglas.globalify.data.ResposeDTO
+import com.douglas.globalify.data.ServiceException
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
@@ -9,7 +12,8 @@ import java.util.logging.Logger
 
 const val COORD_SEP = ","
 
-@RestController() // configure class as a controller of a servlet
+@RestController // configure class as a controller of a servlet
+@RequestMapping("/v1")
 class PlaylistController {
 
     val logger = Logger.getLogger(PlaylistController::class.simpleName)!!

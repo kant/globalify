@@ -1,22 +1,31 @@
-package com.douglas.globalify
+package com.douglas.globalify.service
 
+import com.douglas.globalify.client.SpotifyClient
+import com.douglas.globalify.data.*
+import com.douglas.globalify.data.LogMessage.LOCATION_NOT_FOUND
+import com.douglas.globalify.data.LogMessage.SPOTIFY_AUTH_ERROR
+import com.douglas.globalify.data.LogMessage.SPOTIFY_COMM_ERROR
+import com.douglas.globalify.data.LogMessage.SPOTIFY_PLAYLIST_NOT_FOUND
+import com.douglas.globalify.data.LogMessage.SPOTIFY_TRACKS_NOT_FOUND
+import com.fasterxml.jackson.databind.util.ClassUtil
 import com.google.gson.Gson
+import feign.FeignException
 import khttp.get
 import khttp.post
+import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.cloud.openfeign.FeignClient
+import org.springframework.http.ResponseEntity
 import org.springframework.stereotype.Service
 import java.time.Instant
+import java.util.logging.Level
 import java.util.logging.Logger
-
-const val MINUTES_OFFSET = 60
-
-const val LOCATION_NOT_FOUND = "Location not found"
-const val SPOTIFY_COMM_ERROR = "Could not communicate with Spotify"
-const val SPOTIFY_AUTH_ERROR = "Spotify authentication nonexistant or expired"
-const val SPOTIFY_TRACKS_NOT_FOUND = "Could not find tracks for playlist"
-const val SPOTIFY_PLAYLIST_NOT_FOUND = "Could not find playlist for genre"
 
 @Service
 class PlaylistService {
+
+    @Autowired
+    lateinit var spotifyClient: SpotifyClient
+
     val logger = Logger.getLogger(PlaylistService::class.simpleName)!!
     var spotifyAuth: SpotifyAuth? = null
 
@@ -63,22 +72,28 @@ class PlaylistService {
     }
 
     private fun getTemperature(city: String): WeatherTempResponse {
-        val reqWeather = get(url = WeatherAPI.BASE_URL, params = mapOf(
-                WeatherAPI.LOCATION_PARAM to city,
-                WeatherAPI.APPID_PARAM to WeatherAPI.APPID_VALUE,
-                WeatherAPI.UNITS_PARAM to WeatherAPI.UNITS_VALUE))
+//        val reqWeather = get(url = WeatherAPI.BASE_URL, params = mapOf(
+//                WeatherAPI.LOCATION_PARAM to city,
+//                WeatherAPI.APPID_PARAM to WeatherAPI.APPID_VALUE,
+//                WeatherAPI.UNITS_PARAM to WeatherAPI.UNITS_VALUE))
 
-        logger.info("Weather status code ${reqWeather.statusCode}")
-        logger.info(reqWeather.text)
+        var reqWeather: ResponseEntity<String>? = null
+        try {
+            reqWeather = spotifyClient.getTemperature(city)
+        } catch (e: FeignException) {
+            logger.log(Level.SEVERE, e.contentUTF8(), e)
+        }
 
-        if (reqWeather.statusCode != 200 || reqWeather.text.isEmpty())
-            throw ServiceException(LOCATION_NOT_FOUND)
+        logger.info("Weather response ${reqWeather!!.body}")
+
+//        if (reqWeather.statusCode != 200 || reqWeather.text.isEmpty())
+//            throw ServiceException(LOCATION_NOT_FOUND)
 
         // parses response json to matching object
-        val respWeather = Gson().fromJson<WeatherTempResponse>(reqWeather.text,
-                WeatherTempResponse::class.java)
-        if (respWeather?.main?.temp == null) throw ServiceException(LOCATION_NOT_FOUND)
-        return respWeather
+//        val respWeather = Gson().fromJson<WeatherTempResponse>(
+//                reqWeather, ClassUtil.classOf(WeatherTempResponse::class))
+//        if (respWeather?.main?.temp == null) throw ServiceException(LOCATION_NOT_FOUND)
+        return WeatherTempResponse("", WeatherTemp(10f), 200)
     }
 
     private fun getTemperature(lat: Double, lon: Double): WeatherTempResponse {
